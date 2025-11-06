@@ -24,6 +24,7 @@ export class JSONASTFormatter {
     this.output = '';
     this.indentLevel = 0;
     this.hasNumericKeys = ast._hasNumericKeys || false;
+    this.originalKeys = ast._originalKeys || new Map();
     
     this.formatNode(ast);
     
@@ -40,11 +41,23 @@ export class JSONASTFormatter {
   }
 
   /**
-   * 恢复数字key格式
+   * 恢复数字key格式（只转换原本就是数字key的）
    */
   restoreNumericKeys(formattedJson) {
-    // 将字符串key中的纯数字恢复为数字key
-    return formattedJson.replace(/"(\d+)"(\s*):/g, '$1$2:');
+    if (!this.originalKeys || this.originalKeys.size === 0) {
+      // 如果没有原始数字key信息，使用原来的逻辑
+      return formattedJson.replace(/"(\d+)"(\s*):/g, '$1$2:');
+    }
+    
+    // 只恢复原本就是数字key的部分
+    let result = formattedJson;
+    for (const [numericKey, info] of this.originalKeys) {
+      // 构建更精确的正则表达式来匹配这个特定的key
+      const keyPattern = new RegExp(`"(${numericKey})"(\\s*):`, 'g');
+      result = result.replace(keyPattern, `$1$2:`);
+    }
+    
+    return result;
   }
 
   /**
@@ -63,6 +76,7 @@ export class JSONASTFormatter {
     this.output = '';
     this.indentLevel = 0;
     this.hasNumericKeys = ast._hasNumericKeys || false;
+    this.originalKeys = ast._originalKeys || new Map();
     
     this.formatNode(ast);
     

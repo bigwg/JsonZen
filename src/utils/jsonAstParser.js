@@ -633,22 +633,58 @@ export class JSONASTParser {
  * 检测并预处理数字key
  */
 function preprocessNumericKeys(input) {
-  // 检测是否包含数字key
-  const hasNumericKeys = /(\s*)(\d+)(\s*):/g.test(input);
+  // 更简化但更可靠的数字key检测：在行的开始或非引号字符后的数字key
+  const numericKeyPattern = /(^|[^"])(\s*)(\d+)(\s*):/gm;
+  const hasNumericKeys = numericKeyPattern.test(input);
   
   if (hasNumericKeys) {
-    // 将数字key转换为字符串key用于解析
+    // 重置正则表达式的lastIndex
+    numericKeyPattern.lastIndex = 0;
+    
+    // 存储原始数字key的位置，用于后续验证
+    const originalKeys = new Map();
+    let match;
+    
+    // 收集所有数字key，但不在这里检查重复（留给后续的AST检查）
+    while ((match = numericKeyPattern.exec(input)) !== null) {
+      const numericKey = match[3]; // 数字部分（调整了匹配组的索引）
+      const fullMatch = match[0]; // 完整匹配
+      
+      // 过滤掉不是真正数字key的匹配（比如字符串中的数字）
+      const beforeChar = match[1];
+      if (beforeChar !== '"') { // 确保前面不是引号
+        originalKeys.set(numericKey, {
+          original: fullMatch,
+          position: match.index
+        });
+      }
+    }
+    
+    // 重置正则表达式用于替换
+    numericKeyPattern.lastIndex = 0;
+    
+    // 将数字key转换为字符串key用于解析，同时保留原始信息
+    const processedInput = input.replace(numericKeyPattern, (match, before, space1, num, space2) => {
+      // 如果前面是引号，不替换
+      if (before === '"') {
+        return match;
+      }
+      return `${before}${space1}"${num}"${space2}:`;
+    });
+    
     return {
-      processedInput: input.replace(/(\s*)(\d+)(\s*):/g, '$1"$2"$3:'),
+      processedInput,
       hasNumericKeys: true,
-      originalInput: input
+      originalInput: input,
+      originalKeys // 保存原始数字key信息
     };
   }
   
   return {
     processedInput: input,
     hasNumericKeys: false,
-    originalInput: input
+    originalInput: input,
+    originalKeys: new Map()
   };
 }
 
@@ -656,30 +692,306 @@ function preprocessNumericKeys(input) {
  * 便捷的解析函数（支持数字key自动兼容）
  */
 export function parseJSONWithComments(input) {
-  try {
-    // 首先尝试标准解析
-    const parser = new JSONASTParser(input);
-    return parser.parse();
-  } catch (error) {
-    // 如果失败，尝试预处理数字key后再解析
+  // 先检查是否包含数字key，如果有则直接使用预处理逻辑
+  const numericKeyPattern = /(^|[^"])(\s*)(\d+)(\s*):/gm;
+  const hasNumericKeys = numericKeyPattern.test(input);
+  
+  if (hasNumericKeys) {
+    // 直接使用数字key预处理逻辑
     try {
-      const { processedInput, hasNumericKeys } = preprocessNumericKeys(input);
+      const { processedInput, originalKeys } = preprocessNumericKeys(input);
+      const parser = new JSONASTParser(processedInput);
+      const ast = parser.parse();
       
-      if (hasNumericKeys) {
-        const parser = new JSONASTParser(processedInput);
-        const ast = parser.parse();
-        
-        // 标记这个AST包含数字key，用于格式化时恢复
-        ast._hasNumericKeys = true;
-        ast._originalInput = input;
-        
-        return ast;
-      }
+      // 检查重复key（包括数字key和字符串key的冲突）
+      checkDuplicateKeysWithNumeric(ast, originalKeys, [], input);
+      
+      // 标记这个AST包含数字key，用于格式化时恢复
+      ast._hasNumericKeys = true;
+      ast._originalInput = input;
+      ast._originalKeys = originalKeys;
+      
+      return ast;
     } catch (preprocessError) {
-      // 如果预处理也失败，抛出原始错误
+      // 抛出预处理错误（可能包含重复key信息）
+      throw preprocessError;
+    }
+  } else {
+    // 标准JSON解析
+    try {
+      const parser = new JSONASTParser(input);
+      const ast = parser.parse();
+      
+      // 检查是否有重复key
+      checkDuplicateKeys(ast, [], input);
+      
+      return ast;
+    } catch (error) {
+      throw error;
+    }
+  }
+}
+
+/**
+ * 检查AST中的重复key
+ */
+function checkDuplicateKeys(node, path = [], originalInput = '') {
+  if (!node) return;
+  
+  if (node.type === 'ObjectExpression' && node.properties) {
+    const keyMap = new Map(); // 使用Map存储key的位置信息
+    
+    for (let i = 0; i < node.properties.length; i++) {
+      const property = node.properties[i];
+      
+      if (property.key) {
+        let keyValue;
+        
+        // 处理不同类型的key
+        if (property.key.type === 'Literal') {
+          keyValue = String(property.key.value);
+        } else if (property.key.type === 'Identifier') {
+          keyValue = property.key.name;
+        } else {
+          continue; // 跳过不支持的key类型
+        }
+        
+        if (keyMap.has(keyValue)) {
+          // 发现重复key，使用文本搜索找到准确位置
+          const firstPos = findKeyPositionInText(originalInput, keyValue, 1);
+          const secondPos = findKeyPositionInText(originalInput, keyValue, 2);
+          
+          // 检查是否是数字key（通过检查原始输入中是否没有引号包围）
+          const isOriginalNumeric = isNumericKeyInText(originalInput, keyValue);
+          
+          const errorInfo = {
+            message: `Duplicate key: "${keyValue}"`,
+            duplicateKey: keyValue,
+            firstOccurrence: {
+              index: 0,
+              line: firstPos.line,
+              column: firstPos.column
+            },
+            secondOccurrence: {
+              index: i,
+              line: secondPos.line,
+              column: secondPos.column
+            },
+            path: path.length > 0 ? path.join('.') : 'root',
+            isNumericKey: isOriginalNumeric
+          };
+          
+          const error = new Error(errorInfo.message);
+          error.duplicateKeyInfo = errorInfo;
+          throw error;
+        }
+        
+        keyMap.set(keyValue, {
+          index: i,
+          line: 0, // 暂时不需要存储，因为我们用文本搜索
+          column: 0
+        });
+      }
     }
     
-    // 抛出原始解析错误
-    throw error;
+    // 递归检查嵌套对象
+    for (const property of node.properties) {
+      if (property.value) {
+        let keyForPath;
+        if (property.key.type === 'Literal') {
+          keyForPath = property.key.value;
+        } else if (property.key.type === 'Identifier') {
+          keyForPath = property.key.name;
+        }
+        checkDuplicateKeys(property.value, [...path, keyForPath], originalInput);
+      }
+    }
+  } else if (node.type === 'ArrayExpression' && node.elements) {
+    // 递归检查数组元素
+    for (let i = 0; i < node.elements.length; i++) {
+      checkDuplicateKeys(node.elements[i], [...path, i], originalInput);
+    }
+  }
+}
+
+/**
+ * 计算字符位置对应的行号
+ */
+function calculateLineNumber(text, position) {
+  if (!text || position < 0) return 1;
+  
+  let line = 1;
+  for (let i = 0; i < Math.min(position, text.length); i++) {
+    if (text[i] === '\n') {
+      line++;
+    }
+  }
+  return line;
+}
+
+/**
+ * 计算字符位置对应的列号
+ */
+function calculateColumnNumber(text, position) {
+  if (!text || position < 0) return 1;
+  
+  let column = 1;
+  for (let i = 0; i < Math.min(position, text.length); i++) {
+    if (text[i] === '\n') {
+      column = 1;
+    } else {
+      column++;
+    }
+  }
+  return column;
+}
+
+/**
+ * 检查key在原始文本中是否是数字格式（不带引号）
+ */
+function isNumericKeyInText(text, keyValue) {
+  const lines = text.split('\n');
+  
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
+    
+    // 检查是否存在数字key格式
+    const numericKeyRegex = new RegExp(`(?:^|[^"])\\s*(${keyValue})\\s*:`, 'g');
+    if (numericKeyRegex.test(line)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * 通过key值在原始文本中查找位置
+ */
+function findKeyPositionInText(text, keyValue, occurrence = 1) {
+  const lines = text.split('\n');
+  let currentOccurrence = 0;
+  
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
+    
+    // 尝试匹配数字key模式: 数字 + 可选空格 + 冒号
+    const numericKeyRegex = new RegExp(`(?:^|[^"])\\s*(${keyValue})\\s*:`, 'g');
+    // 尝试匹配字符串key模式: "数字" + 可选空格 + 冒号  
+    const stringKeyRegex = new RegExp(`"(${keyValue})"\\s*:`, 'g');
+    
+    let match = numericKeyRegex.exec(line);
+    let isNumeric = true;
+    if (!match) {
+      match = stringKeyRegex.exec(line);
+      isNumeric = false;
+    }
+    
+    if (match) {
+      currentOccurrence++;
+      if (currentOccurrence === occurrence) {
+        // 计算正确的列位置
+        let keyStartIndex;
+        if (isNumeric) {
+          // 对于数字key，找到数字的开始位置
+          keyStartIndex = line.indexOf(keyValue, match.index);
+        } else {
+          // 对于字符串key，找到引号的开始位置
+          keyStartIndex = line.indexOf(`"${keyValue}"`, match.index);
+        }
+        
+        return {
+          line: lineIndex + 1, // 行号从1开始
+          column: keyStartIndex + 1 // 列号从1开始
+        };
+      }
+    }
+  }
+  
+  // 如果没找到，返回默认位置
+  return { line: 1, column: 1 };
+}
+
+/**
+ * 检查包含数字key的重复key情况
+ */
+function checkDuplicateKeysWithNumeric(node, originalKeys, path = [], originalInput = '') {
+  if (!node) return;
+  
+  if (node.type === 'ObjectExpression' && node.properties) {
+    const keyMap = new Map(); // 使用Map存储key的位置信息
+    
+    for (let i = 0; i < node.properties.length; i++) {
+      const property = node.properties[i];
+      
+      if (property.key) {
+        let keyValue;
+        
+        // 处理不同类型的key
+        if (property.key.type === 'Literal') {
+          keyValue = String(property.key.value);
+        } else if (property.key.type === 'Identifier') {
+          keyValue = property.key.name;
+        } else {
+          continue; // 跳过不支持的key类型
+        }
+        
+        // 检查是否与已存在的key冲突
+        if (keyMap.has(keyValue)) {
+          // 检查是否是原本的数字key
+          const isOriginalNumeric = originalKeys.has(keyValue);
+          const displayKey = isOriginalNumeric ? keyValue : `"${keyValue}"`;
+          
+          // 发现重复key，使用文本搜索找到准确位置
+          const firstPos = findKeyPositionInText(originalInput, keyValue, 1);
+          const secondPos = findKeyPositionInText(originalInput, keyValue, 2);
+          
+          const errorInfo = {
+            message: `Duplicate key: ${displayKey}`,
+            duplicateKey: keyValue,
+            firstOccurrence: {
+              index: 0,
+              line: firstPos.line,
+              column: firstPos.column
+            },
+            secondOccurrence: {
+              index: i,
+              line: secondPos.line,
+              column: secondPos.column
+            },
+            path: path.length > 0 ? path.join('.') : 'root',
+            isNumericKey: isOriginalNumeric
+          };
+          
+          const error = new Error(errorInfo.message);
+          error.duplicateKeyInfo = errorInfo;
+          throw error;
+        }
+        
+        keyMap.set(keyValue, {
+          index: i,
+          line: 0, // 暂时不需要存储，因为我们用文本搜索
+          column: 0
+        });
+      }
+    }
+    
+    // 递归检查嵌套对象
+    for (const property of node.properties) {
+      if (property.value) {
+        let keyForPath;
+        if (property.key.type === 'Literal') {
+          keyForPath = property.key.value;
+        } else if (property.key.type === 'Identifier') {
+          keyForPath = property.key.name;
+        }
+        checkDuplicateKeysWithNumeric(property.value, originalKeys, [...path, keyForPath], originalInput);
+      }
+    }
+  } else if (node.type === 'ArrayExpression' && node.elements) {
+    // 递归检查数组元素
+    for (let i = 0; i < node.elements.length; i++) {
+      checkDuplicateKeysWithNumeric(node.elements[i], originalKeys, [...path, i], originalInput);
+    }
   }
 }

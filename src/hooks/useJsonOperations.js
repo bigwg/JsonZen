@@ -30,6 +30,34 @@ import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants/index.js';
  */
 export const useJsonOperations = (jsonContent, setJsonContent, resetEditorPosition, indentSize = 4) => {
   
+  // 统一的错误处理函数
+  const handleJsonError = (error, defaultMessage = '') => {
+    if (error.duplicateKeyInfo) {
+      const info = error.duplicateKeyInfo;
+      
+      // 简化路径显示
+      let pathDisplay = info.path;
+      if (pathDisplay && pathDisplay !== 'root') {
+        // 如果路径太长，只显示最后几层
+        const pathParts = pathDisplay.split('.');
+        if (pathParts.length > 3) {
+          pathDisplay = '...' + pathParts.slice(-2).join('.');
+        }
+      } else {
+        pathDisplay = '根对象';
+      }
+      
+      toast.error(
+        `发现重复的key "${info.duplicateKey}"\n` + 
+        `首次出现: 第${info.firstOccurrence.line}行\n` +
+        `重复位置: 第${info.secondOccurrence.line}行\n` +
+        (pathDisplay !== '根对象' ? `位置: ${pathDisplay}` : '')
+      );
+    } else {
+      toast.error(defaultMessage + error.message);
+    }
+  };
+  
   // 格式化JSON
   const formatJsonOperation = () => {
     try {
@@ -61,7 +89,7 @@ export const useJsonOperations = (jsonContent, setJsonContent, resetEditorPositi
       toast.success(SUCCESS_MESSAGES.FORMAT_SUCCESS);
     } catch (error) {
       console.error("格式化错误:", error);
-      toast.error(error.message);
+      handleJsonError(error);
     }
   };
 
@@ -96,7 +124,7 @@ export const useJsonOperations = (jsonContent, setJsonContent, resetEditorPositi
       toast.success(SUCCESS_MESSAGES.COMPRESS_SUCCESS);
     } catch (error) {
       console.error("压缩错误:", error);
-      toast.error(ERROR_MESSAGES.COMPRESS_FAILED + error.message);
+      handleJsonError(error, ERROR_MESSAGES.COMPRESS_FAILED);
     }
   };
 

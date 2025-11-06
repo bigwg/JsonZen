@@ -1,10 +1,12 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useJsonEditor } from "@/hooks/useJsonEditor";
 import { useIndentSettings } from "@/hooks/useIndentSettings";
 import { useJsonOperations } from "@/hooks/useJsonOperations";
 import JsonTools from "../components/JsonTools";
 import Editor from "@monaco-editor/react";
 import { ChevronUp } from "lucide-react";
+import { validateJson } from "../utils/jsonAstUtils";
+import { parseJSONWithComments } from "../utils/jsonAstParser";
 
 const Index = () => {
   const {
@@ -22,6 +24,9 @@ const Index = () => {
   
   // 用于获取格式化函数
   const { formatJson } = useJsonOperations(jsonContent, setJsonContent, resetEditorPosition, indentSize);
+
+  // 错误标记状态
+  const [errorMarkers, setErrorMarkers] = useState([]);
   
   // 用于跟踪是否是用户主动切换缩进
   const isIndentToggle = useRef(false);
@@ -43,6 +48,64 @@ const Index = () => {
       return () => clearTimeout(timer);
     }
   }, [indentSize, formatJson]);
+
+  // 检测JSON错误并设置标记
+  const checkForErrors = (content) => {
+    if (!content || content.trim() === '') {
+      setErrorMarkers([]);
+      return;
+    }
+
+    try {
+      // 直接调用解析函数，它会在遇到重复key时抛出异常
+      parseJSONWithComments(content);
+      // 如果没有错误，清除标记
+      setErrorMarkers([]);
+    } catch (error) {
+      if (error.duplicateKeyInfo) {
+        // 处理重复key错误
+        const info = error.duplicateKeyInfo;
+        
+        // 根据key类型计算正确的长度
+        const keyLength = info.isNumericKey 
+          ? info.duplicateKey.length  // 数字key不需要引号
+          : info.duplicateKey.length + 2; // 字符串key需要加引号
+        
+        const markers = [
+          {
+            startLineNumber: info.firstOccurrence.line,
+            startColumn: info.firstOccurrence.column,
+            endLineNumber: info.firstOccurrence.line,
+            endColumn: info.firstOccurrence.column + keyLength,
+            message: `重复的key "${info.duplicateKey}" (首次出现)`,
+            severity: monacoRef.current?.MarkerSeverity?.Error || 8,
+          },
+          {
+            startLineNumber: info.secondOccurrence.line,
+            startColumn: info.secondOccurrence.column,
+            endLineNumber: info.secondOccurrence.line,
+            endColumn: info.secondOccurrence.column + keyLength,
+            message: `重复的key "${info.duplicateKey}" (重复位置)`,
+            severity: monacoRef.current?.MarkerSeverity?.Error || 8,
+          }
+        ];
+        
+        setErrorMarkers(markers);
+      } else {
+        // 其他JSON解析错误
+        setErrorMarkers([]);
+      }
+    }
+  };
+
+  // 监听内容变化，检测错误
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      checkForErrors(jsonContent);
+    }, 300); // 防抖，300ms后检测
+
+    return () => clearTimeout(timer);
+  }, [jsonContent]);
 
   // 配置Monaco Editor以支持注释
   const editorOptions = {
@@ -66,8 +129,12 @@ const Index = () => {
     padding: { top: 16, bottom: 16 },
   };
 
+  // Monaco编辑器实例引用
+  const monacoRef = useRef(null);
+
   // 自定义JSON语言配置
   const beforeMount = (monaco) => {
+    monacoRef.current = monaco;
     // 配置JSON语法检查选项
     monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
       comments: "ignore", // 忽略注释导致的错误
@@ -136,6 +203,31 @@ const Index = () => {
     });
   };
 
+  // 自定义的onMount处理函数
+  const handleEditorMount = (editor, monaco) => {
+    // 调用原有的onMount逻辑
+    handleEditorDidMount(editor, monaco);
+    
+    // 保存Monaco实例
+    monacoRef.current = monaco;
+  };
+
+  // 应用错误标记到编辑器
+  useEffect(() => {
+    if (editorRef.current && monacoRef.current && errorMarkers.length > 0) {
+      const model = editorRef.current.getModel();
+      if (model) {
+        monacoRef.current.editor.setModelMarkers(model, 'json-errors', errorMarkers);
+      }
+    } else if (editorRef.current && monacoRef.current) {
+      // 清除错误标记
+      const model = editorRef.current.getModel();
+      if (model) {
+        monacoRef.current.editor.setModelMarkers(model, 'json-errors', []);
+      }
+    }
+  }, [errorMarkers]);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950 flex flex-col">
       <header className="py-6 px-8 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
@@ -170,7 +262,7 @@ const Index = () => {
               theme="json-extended-dark"
               options={editorOptions}
               beforeMount={beforeMount}
-              onMount={handleEditorDidMount}
+              onMount={handleEditorMount}
             />
             
             {/* 回到顶部按钮 */}

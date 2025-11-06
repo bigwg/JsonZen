@@ -52,6 +52,11 @@ export function formatJson(jsonStr, options = {}) {
     
     return formatJSONAST(ast, defaultOptions);
   } catch (error) {
+    // 如果是带有详细信息的错误，保持原始错误对象
+    if (error.duplicateKeyInfo) {
+      throw error;
+    }
+    // 其他错误才重新包装
     throw new Error(`JSON格式化失败: ${error.message}`);
   }
 }
@@ -64,6 +69,11 @@ export function compressJson(jsonStr) {
     const ast = parseJSONWithComments(jsonStr);
     return compressJSONAST(ast);
   } catch (error) {
+    // 如果是带有详细信息的错误，保持原始错误对象
+    if (error.duplicateKeyInfo) {
+      throw error;
+    }
+    // 其他错误才重新包装
     throw new Error(`JSON压缩失败: ${error.message}`);
   }
 }
@@ -83,6 +93,11 @@ export function removeComments(jsonStr, options = {}) {
     
     return formatJSONASTWithoutComments(ast, defaultOptions);
   } catch (error) {
+    // 如果是带有详细信息的错误，保持原始错误对象
+    if (error.duplicateKeyInfo) {
+      throw error;
+    }
+    // 其他错误才重新包装
     throw new Error(`去除注释失败: ${error.message}`);
   }
 }
