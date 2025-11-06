@@ -17,7 +17,7 @@ English | [简体中文](README.md)
 
 ## ✨ Features
 
-- 🎯 **Full Comments Support** - Support `//` line comments and `/* */` block comments, fully preserved during formatting
+- 🎯 **Json Comments Support** - Support single-line comments in '//' and '/* */' formats, fully preserved during formatting
 - 🔢 **Big Number Precision** - Prevent precision loss for numbers exceeding JavaScript safe range
 - 🗝️ **Integer Key Support** - Perfect support for pure numbers as JSON object keys with syntax highlighting
 - 🔄 **Java Object Conversion** - Smart parsing of Java toString output to JSON
@@ -26,6 +26,10 @@ English | [简体中文](README.md)
 - 🛠️ **Rich Toolset** - Format, compress, escape, comment management and more
 - 📱 **Responsive Design** - Perfect adaptation for desktop and mobile devices
 - 🌙 **Modern Interface** - Dark theme + gradient design
+
+## 🖼️ Preview
+
+![JsonZen Homepage](https://raw.githubusercontent.com/bigwg/PicRepo/main/imgJsonZenHomePage.jpg)
 
 ## 🚀 Quick Start
 
@@ -143,6 +147,28 @@ Automatically converts to standard JSON format.
 - **Routing**: React Router (Hash Router)
 - **Testing**: Vitest + Coverage Testing
 
+### Core Modules
+
+```
+src/
+├── components/          # UI Components
+│   ├── ui/             # Base UI Components
+│   └── JsonTools.jsx   # JSON Toolbar
+├── hooks/              # Custom Hooks
+│   ├── useJsonEditor.js
+│   └── useJsonOperations.js
+├── utils/              # Utility Functions
+│   ├── jsonAst.js      # AST Core
+│   ├── jsonAstParser.js
+│   ├── jsonAstFormatter.js
+│   └── jsonParser.js   # Java Parser
+├── pages/              # Page Components
+└── test/               # Test Files
+    ├── unit/           # Unit Tests
+    ├── integration/    # Integration Tests
+    └── e2e/            # End-to-End Tests
+```
+
 ## 🧪 Testing
 
 ```bash
@@ -156,6 +182,25 @@ npm run test:coverage
 npm run test:ui
 ```
 
+## 📚 API Documentation
+
+### Core Utility Functions
+
+```javascript
+import { formatJson, compressJson, validateJson } from '@/utils/jsonAstUtils';
+
+// Format JSON (preserve comments)
+const formatted = formatJson(jsonString, { indent: 4 });
+
+// Compress JSON
+const compressed = compressJson(jsonString);
+
+// Validate JSON
+const result = validateJson(jsonString);
+```
+
+For more API documentation, please see [docs/api.md](docs/api.md)
+
 ## 🤝 Contributing
 
 We welcome all forms of contribution! Please read the [Contributing Guide](CONTRIBUTING.md) for details.
@@ -167,6 +212,16 @@ We welcome all forms of contribution! Please read the [Contributing Guide](CONTR
 3. Commit changes (`git commit -m 'Add some AmazingFeature'`)
 4. Push to branch (`git push origin feature/AmazingFeature`)
 5. Create Pull Request
+
+### Code Standards
+
+```bash
+# Code linting
+npm run lint
+
+# Code formatting
+npm run format
+```
 
 ## 🐛 Issues
 
@@ -188,12 +243,19 @@ Thanks to all contributors and especially the following open source projects:
 - [Tailwind CSS](https://tailwindcss.com/) - Utility-first CSS framework
 - [Vite](https://vitejs.dev/) - Fast build tool
 
+## 📊 Project Statistics
+
+![GitHub stars](https://img.shields.io/github/stars/bigwg/JsonZen?style=social)
+![GitHub forks](https://img.shields.io/github/forks/bigwg/JsonZen?style=social)
+![GitHub issues](https://img.shields.io/github/issues/bigwg/JsonZen)
+![GitHub contributors](https://img.shields.io/github/contributors/bigwg/JsonZen)
+
 ---
 
 <div align="center">
 
 **If this project helps you, please give us a ⭐️ Star!**
 
-Made with ❤️ by [zhaozhiwei04](https://github.com/yourusername)
+Made with ❤️ by [bigwg](https://github.com/bigwg)
 
 </div>

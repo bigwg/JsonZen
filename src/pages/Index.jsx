@@ -283,7 +283,7 @@ const Index = () => {
 
         <footer className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
           {/* <p>支持JSON注释 • 功能丰富 • 界面简洁</p> */}
-          <p className="mt-2">需求&amp;问题反馈大象联系：zhaozhiwei04</p>
+          <p className="mt-2">需求&amp;问题反馈：<a href="https://github.com/bigwg/JsonZen/issues" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">GitHub issues</a></p>
         </footer>
       </main>
     </div>

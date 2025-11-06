@@ -17,7 +17,7 @@
 
 ## ✨ 特性
 
-- 🎯 **完整注释支持** - 支持 `//` 单行注释和 `/* */` 块注释，格式化时完整保留
+- 🎯 **Json注释支持** - 支持 `//` 和 `/* */` 格式的单行注释，格式化时完整保留
 - 🔢 **大数字精度保护** - 防止超过 JavaScript 安全范围的数字精度丢失
 - 🗝️ **整数键名支持** - 完美支持纯数字作为 JSON 对象的键名，语法高亮识别
 - 🔄 **Java 对象转换** - 智能解析 Java toString 输出为 JSON
@@ -29,7 +29,7 @@
 
 ## 🖼️ 预览
 
-![JsonZen 主界面](https://raw.githubusercontent.com/bigwg/PicRepo/main/imgJsonZen-homePage.jpg)
+![JsonZen 主界面](https://raw.githubusercontent.com/bigwg/PicRepo/main/imgJsonZenHomePage.jpg)
 
 ## 🚀 快速开始
 
@@ -56,7 +56,7 @@ npm run dev
 pnpm dev
 ```
 
-访问 `http://localhost:5173` 开始使用。
+访问 `http://localhost:9500` 开始使用。
 
 ### 构建生产版本
 
@@ -245,10 +245,10 @@ npm run format
 
 ## 📊 项目统计
 
-![GitHub stars](https://img.shields.io/github/stars/yourusername/JsonZen?style=social)
-![GitHub forks](https://img.shields.io/github/forks/yourusername/JsonZen?style=social)
-![GitHub issues](https://img.shields.io/github/issues/yourusername/JsonZen)
-![GitHub contributors](https://img.shields.io/github/contributors/yourusername/JsonZen)
+![GitHub stars](https://img.shields.io/github/stars/bigwg/JsonZen?style=social)
+![GitHub forks](https://img.shields.io/github/forks/bigwg/JsonZen?style=social)
+![GitHub issues](https://img.shields.io/github/issues/bigwg/JsonZen)
+![GitHub contributors](https://img.shields.io/github/contributors/bigwg/JsonZen)
 
 ---
 
@@ -256,6 +256,6 @@ npm run format
 
 **如果这个项目对您有帮助，请给我们一个 ⭐️ Star！**
 
-Made with ❤️ by [zhaozhiwei04](https://github.com/yourusername)
+Made with ❤️ by [bigwg](https://github.com/bigwg)
 
 </div>
