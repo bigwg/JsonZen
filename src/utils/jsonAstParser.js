@@ -250,11 +250,22 @@ export class JSONASTParser {
     let value = '';
     
     while (this.peek() !== '"') {
+      // 防止无限循环：检查是否到达字符串末尾
+      if (this.pos >= this.input.length) {
+        throw new Error('Unterminated string: reached end of input');
+      }
+
       const char = this.peek();
       
       if (char === '\\') {
         this.advance();
         const escaped = this.peek();
+
+        // 防止转义字符后到达末尾
+        if (this.pos >= this.input.length) {
+          throw new Error('Unterminated string: escape character at end of input');
+        }
+
         switch (escaped) {
           case '"':
           case '\\':
@@ -281,6 +292,9 @@ export class JSONASTParser {
             this.advance();
             let unicode = '';
             for (let i = 0; i < 4; i++) {
+              if (this.pos >= this.input.length) {
+                throw new Error('Unterminated unicode escape sequence');
+              }
               unicode += this.peek();
               this.advance();
             }
@@ -527,12 +541,19 @@ export class JSONASTParser {
     this.advance();
     
     // 读取到 */
-    while (this.pos < this.input.length - 1) {
-      if (this.peek() === '*' && this.input[this.pos + 1] === '/') {
+    while (this.pos < this.input.length) {
+      // 检查是否找到了结束符 */
+      if (this.peek() === '*' && this.pos + 1 < this.input.length && this.input[this.pos + 1] === '/') {
         this.advance(); // *
         this.advance(); // /
         break;
       }
+
+      // 防止无限循环：如果到达末尾还没找到 */，抛出错误
+      if (this.pos >= this.input.length) {
+        throw new Error('Unterminated block comment: reached end of input without finding */');
+      }
+
       text += this.peek();
       this.advance();
     }
@@ -544,7 +565,15 @@ export class JSONASTParser {
    * 跳过空白字符和注释
    */
   skipWhitespaceAndComments() {
+    let maxIterations = this.input.length + 10; // 防止无限循环的迭代次数限制
+    let iterations = 0;
+
     while (this.pos < this.input.length) {
+      iterations++;
+      if (iterations > maxIterations) {
+        throw new Error('Infinite loop detected in skipWhitespaceAndComments');
+      }
+
       const oldPos = this.pos;
       
       this.skipWhitespace();
@@ -633,45 +662,91 @@ export class JSONASTParser {
  * 检测并预处理数字key
  */
 function preprocessNumericKeys(input) {
-  // 更简化但更可靠的数字key检测：在行的开始或非引号字符后的数字key
-  const numericKeyPattern = /(^|[^"])(\s*)(\d+)(\s*):/gm;
-  const hasNumericKeys = numericKeyPattern.test(input);
+  // 更精确的数字key检测：排除字符串内部的数字
+  // 使用更复杂的逻辑来避免在字符串值中匹配
   
-  if (hasNumericKeys) {
-    // 重置正则表达式的lastIndex
-    numericKeyPattern.lastIndex = 0;
+  // 首先，我们需要找到所有真正的数字key（不在字符串内部）
+  const lines = input.split('\n');
+  let hasNumericKeys = false;
+  const originalKeys = new Map();
+  let processedLines = [];
     
-    // 存储原始数字key的位置，用于后续验证
-    const originalKeys = new Map();
-    let match;
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
     
-    // 收集所有数字key，但不在这里检查重复（留给后续的AST检查）
-    while ((match = numericKeyPattern.exec(input)) !== null) {
-      const numericKey = match[3]; // 数字部分（调整了匹配组的索引）
-      const fullMatch = match[0]; // 完整匹配
+    // 检查这一行是否包含数字key
+    // 数字key的特征：数字后面跟着冒号，且不在字符串内部
+    // 我们需要跳过字符串内部的内容
       
-      // 过滤掉不是真正数字key的匹配（比如字符串中的数字）
-      const beforeChar = match[1];
-      if (beforeChar !== '"') { // 确保前面不是引号
-        originalKeys.set(numericKey, {
-          original: fullMatch,
-          position: match.index
-        });
+    let processedLine = '';
+    let inString = false;
+    let i = 0;
+
+    while (i < line.length) {
+      const char = line[i];
+
+      // 处理字符串边界
+      if (char === '"' && (i === 0 || line[i - 1] !== '\\')) {
+        inString = !inString;
+        processedLine += char;
+        i++;
+        continue;
       }
+    
+      // 如果在字符串内部，直接复制
+      if (inString) {
+        processedLine += char;
+        i++;
+        continue;
+      }
+    
+      // 不在字符串内部，检查是否是数字key
+      if (char >= '0' && char <= '9') {
+        // 收集完整的数字
+        let numStr = '';
+        let numStart = i;
+        while (i < line.length && line[i] >= '0' && line[i] <= '9') {
+          numStr += line[i];
+          i++;
+        }
+
+        // 跳过空白
+        let spaceAfterNum = '';
+        while (i < line.length && (line[i] === ' ' || line[i] === '\t')) {
+          spaceAfterNum += line[i];
+          i++;
+        }
+
+        // 检查是否后面跟着冒号
+        if (i < line.length && line[i] === ':') {
+          // 这是一个数字key
+          hasNumericKeys = true;
+          originalKeys.set(numStr, {
+            original: numStr,
+            position: numStart
+          });
+
+          // 转换为字符串key
+          processedLine += `"${numStr}"${spaceAfterNum}`;
+          i++; // 跳过冒号，让后续逻辑处理
+          continue;
+        } else {
+          // 不是数字key，恢复原样
+          processedLine += numStr + spaceAfterNum;
+          continue;
+        }
+      }
+    
+      processedLine += char;
+      i++;
     }
-    
-    // 重置正则表达式用于替换
-    numericKeyPattern.lastIndex = 0;
-    
-    // 将数字key转换为字符串key用于解析，同时保留原始信息
-    const processedInput = input.replace(numericKeyPattern, (match, before, space1, num, space2) => {
-      // 如果前面是引号，不替换
-      if (before === '"') {
-        return match;
-      }
-      return `${before}${space1}"${num}"${space2}:`;
-    });
-    
+
+    processedLines.push(processedLine);
+  }
+
+  const processedInput = processedLines.join('\n');
+
+  if (hasNumericKeys) {
     return {
       processedInput,
       hasNumericKeys: true,
@@ -693,13 +768,12 @@ function preprocessNumericKeys(input) {
  */
 export function parseJSONWithComments(input) {
   // 先检查是否包含数字key，如果有则直接使用预处理逻辑
-  const numericKeyPattern = /(^|[^"])(\s*)(\d+)(\s*):/gm;
-  const hasNumericKeys = numericKeyPattern.test(input);
+  // 使用更精确的检测方法
+  const { processedInput, hasNumericKeys, originalKeys } = preprocessNumericKeys(input);
   
   if (hasNumericKeys) {
     // 直接使用数字key预处理逻辑
     try {
-      const { processedInput, originalKeys } = preprocessNumericKeys(input);
       const parser = new JSONASTParser(processedInput);
       const ast = parser.parse();
       
