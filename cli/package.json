@@ -1,0 +1,15 @@
+{
+  "name": "@bigvvg/jsonzen",
+  "version": "1.0.0",
+  "description": "One-command launcher for JsonZen — ships a prebuilt static bundle, no source needed. Usage: jsonzen [start|stop|update] (npx @bigvvg/jsonzen).",
+  "bin": {
+    "jsonzen": "bin.js"
+  },
+  "files": [
+    "dist",
+    "bin.js"
+  ],
+  "prepack": "node prepack.js",
+  "license": "Apache-2.0",
+  "private": false
+}

@@ -1,0 +1,44 @@
+name: Publish jsonzen CLI
+
+# 打版本 tag（如 v1.0.1）并推送到仓库时，自动构建并发布 cli 包到 npm。
+# 认证：npm Trusted Publishing (OIDC)，无需 NPM_TOKEN；需在 npm 包设置中绑定本 workflow。
+# 使用端 `npx @bigvvg/jsonzen` 即会拉取最新版。
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write  # OIDC：向 npm 换取短期发布凭证，无需 NPM_TOKEN
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+
+      # npm Trusted Publishing 要求 npm CLI >= 11.5.1
+      - name: Ensure npm CLI version
+        run: npm install -g npm@latest
+
+      # 用 tag 名（去掉 v 前缀）作为 npm 版本号，例如 v1.2.3 -> 1.2.3
+      - name: Set version from tag
+        working-directory: cli
+        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
+
+      - name: Install dependencies & build (生成 dist)
+        run: npm ci && npm run build
+
+      # npm publish 会触发 cli/package.json 的 prepack 钩子，自动把 ../dist 拷贝进 cli/dist
+      # 通过 GitHub OIDC 认证（Trusted Publisher 已绑定本 workflow），无需任何 token
+      - name: Publish to npm
+        working-directory: cli
+        run: npm publish --access public

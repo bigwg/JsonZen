@@ -4,6 +4,27 @@
 
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/) 规范。
 
+## [Unreleased]
+
+### ✨ 新增功能
+
+- **`jsonzen` CLI 一键启动（免源码）**
+  - 新增独立 npm 包 `@bigvvg/jsonzen`，内置预构建静态产物与零依赖静态服务器
+  - 支持子命令：`jsonzen start`（后台守护）/ `jsonzen stop` / `jsonzen update`
+  - 使用者无需 clone 源码、无需 `npm install` 工程依赖，直接 `npx @bigvvg/jsonzen` 即可启动，访问 `http://localhost:8508`
+
+- **Docker 一键启动**
+  - 新增多阶段 `Dockerfile`（容器内构建 + nginx 托管）与 `nginx.conf`
+  - 新增 `scripts/start.sh` / `scripts/start.ps1`，自动拉取（或本地构建兜底）镜像并启动，终端打印访问地址
+
+- **自动发布流水线**
+  - 新增 `.github/workflows/publish-cli.yml`：打 `v*` tag 自动构建并发布 `@bigvvg/jsonzen` 包到 npm
+  - 新增 `.github/workflows/docker.yml`：推送主分支自动构建并推送镜像到 GHCR
+  - 根 `package.json` 新增 `release:cli` 脚本，支持本地一键发布
+
+- **文档**
+  - README 快速开始章节集成「免源码一键启动」说明
+
 ## [1.0.0] - 2024-08-30
 
 ### 🎉 首次发布
